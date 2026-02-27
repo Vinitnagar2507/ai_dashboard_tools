@@ -130,7 +130,7 @@ function Dashboard() {
   // ✅ FIXED: Poll every 10s and detect ADD, DELETE, and UPDATE changes
   useEffect(() => {
     const fetchTools = () => {
-      fetch("http://localhost:5000/api/dashboard-tools")
+      fetch(`${import.meta.env.VITE_API_URL}/api/dashboard-tools`)
         .then((res) => res.json())
         .then((data) => {
           const toolList = Array.isArray(data) ? data : [];

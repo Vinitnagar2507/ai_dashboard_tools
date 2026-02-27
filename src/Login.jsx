@@ -18,7 +18,7 @@ function Login() {
       }
 
       // 1. Send the Google JWT token to your Node.js backend
-      const response = await fetch("http://localhost:5000/api/google-login", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/google-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: credentialResponse.credential }),
