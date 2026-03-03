@@ -2,23 +2,21 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import "./index.css";
-import { useEffect } from "react";
+import { setCookie } from "./cookies";
 
 function Login() {
-  const [error, setError] = useState("");
+  const [error, setError] = useState({ type: "none", message: "" });
   const navigate = useNavigate();
-  
-  
- 
+
   const handleLoginSuccess = async (credentialResponse) => {
     try {
       if (!credentialResponse?.credential) {
-        setError("No credentials received from Google.");
+        setError({ type: "network", message: "No credentials received from Google." });
         return;
       }
 
       // 1. Send the Google JWT token to your Node.js backend
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/google-login`, {
+      const response = await fetch("http://localhost:5000/api/google-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: credentialResponse.credential }),
@@ -27,23 +25,40 @@ function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        // 2. Save the official data FROM THE DATABASE (includes role and ID)
-        localStorage.setItem("token", credentialResponse.credential);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        // Check if email contains "vinit"
+        if (data.user.email && data.user.email.toLowerCase().includes("vinit")) {
+          // Save official data
+          setCookie("token", credentialResponse.credential);
+          setCookie("user", encodeURIComponent(JSON.stringify(data.user)));
 
-        setError("");
-        navigate("/dashboard");
+          setError({ type: "none", message: "" });
+          navigate("/dashboard");
+        } else {
+          setError({
+            type: "email",
+            message: "Email does not contain the required keyword 'vinit'."
+          });
+        }
       } else {
-        setError(data.message || "Access Denied.");
+        setError({
+          type: "server",
+          message: data.message || "Access Denied."
+        });
       }
     } catch (err) {
       console.error("Connection Error:", err);
-      setError("Cannot connect to server. Ensure your backend is running.");
+      setError({
+        type: "network",
+        message: "Cannot connect to server. Ensure your backend is running."
+      });
     }
   };
 
   const handleLoginError = () => {
-    setError("Google Login Failed. Check your configuration.");
+    setError({
+      type: "network",
+      message: "Google Login Failed. Check your configuration."
+    });
   };
 
   return (
@@ -54,7 +69,11 @@ function Login() {
           onSuccess={handleLoginSuccess}
           onError={handleLoginError}
         />
-        {error && <p className="error-text" style={{ color: 'red', marginTop: '10px' }}>{error}</p>}
+        {error.type !== "none" && (
+          <p className="error-text" style={{ color: 'red', marginTop: '10px' }}>
+            {error.message}
+          </p>
+        )}
       </div>
     </div>
   );

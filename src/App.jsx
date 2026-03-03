@@ -2,10 +2,11 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
+import { getCookie, setCookie, deleteCookie } from "./cookies";
 
 const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem("token");
-  if (!token) return <Navigate to="/login" replace />;
+const token = getCookie("token");
+if (!token) return <Navigate to="/login" replace />;
   return children;
 };
 

@@ -1,7 +1,11 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { clearAppCookies } from "./cookies";
+
+// inside your component
 import "./index.css";
 import cdassLogo from "./assets/cdass-logo.png";
+import { getCookie, setCookie, deleteCookie } from "./cookies";
 
 function Dashboard() {
   const [tools, setTools] = useState([]);
@@ -10,56 +14,32 @@ function Dashboard() {
   const [showProfile, setShowProfile] = useState(false);
   const [currentView, setCurrentView] = useState("dashboard");
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [users, setUsers] = useState([]);
 
-  // ✅ Load notifications from localStorage so they persist on refresh
+  
   const [notifications, setNotifications] = useState(() => {
-    try {
-      const saved = localStorage.getItem("notifications");
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const raw = getCookie("notifications");
+  return raw ? JSON.parse(decodeURIComponent(raw)) : [];
+});
+const addUserToHistory = (newUser) => {
+  setUsers((prevUsers) => [...prevUsers, newUser]);
+};
 
-  const [toolUsage, setToolUsage] = useState(() => {
-    try {
-      const saved = localStorage.getItem("toolUsage");
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
-  });
+ const [toolUsage, setToolUsage] = useState(() => {
+  const raw = getCookie("toolUsage");
+  return raw ? JSON.parse(decodeURIComponent(raw)) : {};
+});
 
-  // ✅ Use a ref to track previous tools list WITHOUT causing re-renders
-  // This is the KEY fix — we compare old vs new tool data on every poll
-  const prevToolsRef = useRef(() => {
-    try {
-      const saved = localStorage.getItem("prevToolsSnapshot");
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+ 
 
   const profileRef = useRef(null);
   const notifRef = useRef(null);
   const navigate = useNavigate();
 
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
-    try {
-      return savedUser
-        ? JSON.parse(savedUser)
-        : {
-            name: "Vinit",
-            surname: "Nagar",
-            email: "vinit.nagar@example.com",
-            role: "Admin",
-          };
-    } catch (e) {
-      return { name: "User", surname: "", email: "", role: "Viewer" };
-    }
-  });
+  const raw = getCookie("user");
+  return raw ? JSON.parse(decodeURIComponent(raw)) : { name: "User" };
+});
 
   const isAdmin = user?.role?.toLowerCase() === "admin";
 
@@ -77,7 +57,7 @@ function Dashboard() {
           lastUsed: Date.now(),
         },
       };
-      localStorage.setItem("toolUsage", JSON.stringify(updated));
+      setCookie("toolUsage", encodeURIComponent(JSON.stringify(updated)));
       return updated;
     });
   };
@@ -108,10 +88,10 @@ function Dashboard() {
     return <span className="fallback-emoji">{iconPath || "🤖"}</span>;
   };
 
-  // ✅ Save notifications to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("notifications", JSON.stringify(notifications));
-  }, [notifications]);
+  
+ useEffect(() => {
+  setCookie("notifications", encodeURIComponent(JSON.stringify(notifications)));
+}, [notifications]);
 
   // Close both dropdowns when clicking outside
   useEffect(() => {
@@ -128,74 +108,92 @@ function Dashboard() {
   }, []);
 
   // ✅ FIXED: Poll every 10s and detect ADD, DELETE, and UPDATE changes
-  useEffect(() => {
-    const fetchTools = () => {
-      fetch(`${import.meta.env.VITE_API_URL}/api/dashboard-tools`)
-        .then((res) => res.json())
-        .then((data) => {
-          const toolList = Array.isArray(data) ? data : [];
-          const now = new Date().toLocaleTimeString();
-          const newNotifs = [];
+ useEffect(() => {
+  const fetchTools = () => {
+    fetch("http://localhost:5000/api/dashboard-tools")
+      .then((res) => res.json())
+      .then((data) => {
+        const toolList = Array.isArray(data) ? data : [];
+        const now = new Date().toLocaleTimeString();
+        const newNotifs = [];
 
-          // Load previous snapshot from localStorage
-          let prevSnapshot = null;
-          try {
-            const saved = localStorage.getItem("prevToolsSnapshot");
-            prevSnapshot = saved ? JSON.parse(saved) : null;
-          } catch (e) {
-            prevSnapshot = null;
-          }
+        // ✅ Load previous snapshot from COOKIE
+        let prevSnapshot = null;
+        try {
+          const saved = getCookie("prevToolsSnapshot");
+          prevSnapshot = saved ? JSON.parse(saved) : null;
+        } catch (e) {
+          prevSnapshot = null;
+        }
 
-          if (prevSnapshot !== null) {
-            // ✅ Build maps for easy comparison
-            const prevMap = {};
-            prevSnapshot.forEach((t) => { prevMap[t.id] = t; });
+        if (prevSnapshot !== null) {
+          const prevMap = {};
+          prevSnapshot.forEach((t) => {
+            prevMap[t.id] = t;
+          });
 
-            const currMap = {};
-            toolList.forEach((t) => { currMap[t.id] = t; });
+          const currMap = {};
+          toolList.forEach((t) => {
+            currMap[t.id] = t;
+          });
 
-            // ✅ Detect ADDED tools
-            toolList.forEach((t) => {
-              if (!prevMap[t.id]) {
-                newNotifs.push({ message: `🆕 Tool added: "${t.title}"`, time: now });
-              }
-            });
-
-            // ✅ Detect DELETED tools
-            prevSnapshot.forEach((t) => {
-              if (!currMap[t.id]) {
-                newNotifs.push({ message: `🗑️ Tool removed: "${t.title}"`, time: now });
-              }
-            });
-
-            // ✅ Detect UPDATED tools (title or link changed)
-            toolList.forEach((t) => {
-              const prev = prevMap[t.id];
-              if (prev) {
-                if (prev.title !== t.title) {
-                  newNotifs.push({ message: `✏️ Tool renamed: "${prev.title}" → "${t.title}"`, time: now });
-                }
-                if (prev.link !== t.link) {
-                  newNotifs.push({ message: `🔗 Tool link updated: "${t.title}"`, time: now });
-                }
-                if (prev.icon !== t.icon) {
-                  newNotifs.push({ message: `🖼️ Tool icon updated: "${t.title}"`, time: now });
-                }
-              }
-            });
-
-            if (newNotifs.length > 0) {
-              setNotifications((prev) => [...prev, ...newNotifs]);
+          // 🔹 Detect ADDED tools
+          toolList.forEach((t) => {
+            if (!prevMap[t.id]) {
+              newNotifs.push({ message: `🆕 Tool added: "${t.title}"`, time: now });
             }
+          });
+
+          // 🔹 Detect REMOVED tools
+          prevSnapshot.forEach((t) => {
+            if (!currMap[t.id]) {
+              newNotifs.push({ message: `🗑️ Tool removed: "${t.title}"`, time: now });
+            }
+          });
+          // --- Detect added tables
+      toolList.forEach((t) => {
+        if (t.table && !prevTableMap[t.table]) {
+          newNotifs.push({ message: `🆕 Table added: "${t.table}"`, time: now });
+        }
+      });
+
+      // --- Detect removed tables
+      prevSnapshot.forEach((t) => {
+        if (t.table && !currTableMap[t.table]) {
+          newNotifs.push({ message: `🗑️ Table removed: "${t.table}"`, time: now });
+        }
+      });
+
+          // 🔹 Detect UPDATED tools
+          toolList.forEach((t) => {
+            const prev = prevMap[t.id];
+            if (prev) {
+              if (prev.title !== t.title) {
+                newNotifs.push({ message: `✏️ Tool renamed: "${prev.title}" → "${t.title}"`, time: now });
+              }
+              if (prev.link !== t.link) {
+                newNotifs.push({ message: `🔗 Tool link updated: "${t.title}"`, time: now });
+              }
+              if (prev.icon !== t.icon) {
+                newNotifs.push({ message: `🖼️ Tool icon updated: "${t.title}"`, time: now });
+              }
+            }
+          });
+
+          if (newNotifs.length > 0) {
+            setNotifications((prev) => [...prev, ...newNotifs]);
           }
+        }
 
-          // ✅ Save current snapshot for next comparison
-          localStorage.setItem("prevToolsSnapshot", JSON.stringify(toolList));
-          setTools(toolList);
-        })
-        .catch((err) => console.error("Error loading tools:", err));
-    };
+        // ✅ Save snapshot to COOKIE instead of localStorage
+        setCookie("prevToolsSnapshot", JSON.stringify(toolList), 1);
 
+        setTools(toolList);
+      })
+      .catch((err) => console.error("Error loading tools:", err));
+  };
+
+ 
     fetchTools();                                     // Run immediately on mount
     const interval = setInterval(fetchTools, 10000);  // Then every 10 seconds
     return () => clearInterval(interval);
@@ -206,35 +204,26 @@ function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // ✅ Clear All also removes from localStorage
+
   const clearNotifications = (e) => {
-    e.stopPropagation();
-    setNotifications([]);
-    localStorage.removeItem("notifications");
-    setShowNotifDropdown(false);
-  };
+  setNotifications([]);
+  deleteCookie("notifications");
+};
 
-  // ✅ Logout only removes auth data, keeps snapshot to avoid false notifications on next login
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    
-    // prevToolsSnapshot is intentionally kept
-    window.location.href = "/login";
-  };
-// useEffect(() => {
-//   // ✅ Auto logout after 30 minutes (1800000 ms)
-//   const sessionTimer = setTimeout(() => {
-//     alert("Your session has expired. Please login again.");
-//     localStorage.removeItem("token");
-//     localStorage.removeItem("user");
-//     localStorage.removeItem("notifications");
-//     localStorage.removeItem("toolUsage");
-//     window.location.href = "/login";
-//   }, 1800000); // 30 minutes
+  const handleLogout = async () => {
+  try {
+    await fetch("http://localhost:5000/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (err) {
+    console.error("Logout error:", err);
+  } finally {
+    clearAppCookies();                 // ✅ clear cookies FIRST
+    navigate("/", { replace: true }); // ✅ redirect AFTER
+  }
+};
 
-  // ✅ Cleanup timer when component unmounts
-//   return () => clearTimeout(sessionTimer);
-// }, []);
   const formatDate = (date) =>
     date.toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -479,12 +468,10 @@ function Dashboard() {
                 </table>
               </div>
             )}
-
-          </div>
+            </div>
         </main>
       </div>
     </div>
   );
 }
-
-export default Dashboard;
+export default Dashboard; 

@@ -30,7 +30,16 @@ app.get('/api/dashboard-tools', async (req, res) => {
     res.status(500).json({ message: "Error fetching tools from database" });
   }
 });
+app.use(require("cookie-parser")());
 
+app.post('/api/logout', (req, res) => {
+  // ✅ Clear every cookie the server set
+  res.clearCookie("sessionId", { httpOnly: true, sameSite: "lax", path: "/" });
+  res.clearCookie("token",     { httpOnly: true, sameSite: "lax", path: "/" });
+  res.clearCookie("user_id",   { httpOnly: true, sameSite: "lax", path: "/" });
+
+  res.status(200).json({ message: "Logged out successfully" });
+});
 // Existing Login Route
 app.post('/api/google-login', async (req, res) => {
   const { token } = req.body;
@@ -57,3 +66,5 @@ app.post('/api/google-login', async (req, res) => {
 });
 
 app.listen(5000, () => console.log("Server running on port 5000"));
+
+
