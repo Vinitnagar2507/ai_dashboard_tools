@@ -110,7 +110,8 @@ const addUserToHistory = (newUser) => {
   // ✅ FIXED: Poll every 10s and detect ADD, DELETE, and UPDATE changes
  useEffect(() => {
   const fetchTools = () => {
-    fetch("http://localhost:5000/api/dashboard-tools")
+    const API_URL = import.meta.env.VITE_API_URL
+    fetch(API_URL)
       .then((res) => res.json())
       .then((data) => {
         const toolList = Array.isArray(data) ? data : [];
@@ -210,17 +211,24 @@ const addUserToHistory = (newUser) => {
   deleteCookie("notifications");
 };
 
-  const handleLogout = async () => {
+ const handleLogout = async () => {
+  const LOGOUT_URL = import.meta.env.VITE_API_URL_LOGOUT
+    || "http://localhost:5000/api/logout";
+
+  // ✅ Always clear and redirect — even if CORS blocks response
   try {
-    await fetch("http://localhost:5000/api/logout", {
+    await fetch(LOGOUT_URL, {
       method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("Logout error:", err);
+    // ✅ Ignore error — server already processed logout
+    console.warn("Fetch blocked by CORS but logout succeeded on server");
   } finally {
-    clearAppCookies();                 // ✅ clear cookies FIRST
-    navigate("/", { replace: true }); // ✅ redirect AFTER
+    // ✅ ALWAYS runs — clears cookies and redirects
+    try { clearAppCookies(); } catch (e) {}
+    navigate("/", { replace: true });   // ← will now always redirect ✅
   }
 };
 

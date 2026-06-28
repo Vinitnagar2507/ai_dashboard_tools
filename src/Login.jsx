@@ -1,12 +1,36 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import "./index.css";
 import { setCookie } from "./cookies";
 
+// ✅ Only this is hardcoded — everything else comes from DB
+const BASE_URL = "http://localhost:5000";
+
 function Login() {
-  const [error, setError] = useState({ type: "none", message: "" });
-  const navigate = useNavigate();
+  const [error, setError]           = useState({ type: "none", message: "" });
+  const [googleLoginUrl, setGoogleLoginUrl] = useState(null); // ✅ loaded from DB
+  const navigate                    = useNavigate();
+
+  // ✅ Load google-login URL from DB config on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res  = await fetch(`${BASE_URL}/api/config`);
+        const data = await res.json();
+        // Use api_url from DB but replace the path with /api/google-login
+        // OR you can add a separate google_login_url column to your config table
+        const serverBase = data.api_url
+          ? new URL(data.api_url).origin          // extracts http://localhost:5000
+          : BASE_URL;
+        setGoogleLoginUrl(`${serverBase}/api/google-login`);
+      } catch (err) {
+        console.error("Could not load config:", err);
+        setGoogleLoginUrl(`${BASE_URL}/api/google-login`); // fallback
+      }
+    };
+    loadConfig();
+  }, []);
 
   const handleLoginSuccess = async (credentialResponse) => {
     try {
@@ -15,8 +39,13 @@ function Login() {
         return;
       }
 
-      // 1. Send the Google JWT token to your Node.js backend
-      const response = await fetch("http://localhost:5000/api/google-login", {
+      if (!googleLoginUrl) {
+        setError({ type: "network", message: "Config not loaded yet. Please wait and try again." });
+        return;
+      }
+
+      // ✅ URL is dynamic — comes from DB
+      const response = await fetch(googleLoginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: credentialResponse.credential }),
@@ -25,12 +54,9 @@ function Login() {
       const data = await response.json();
 
       if (response.ok) {
-        // Check if email contains "vinit"
         if (data.user.email && data.user.email.toLowerCase().includes("vinit")) {
-          // Save official data
           setCookie("token", credentialResponse.credential);
           setCookie("user", encodeURIComponent(JSON.stringify(data.user)));
-
           setError({ type: "none", message: "" });
           navigate("/dashboard");
         } else {
@@ -70,7 +96,7 @@ function Login() {
           onError={handleLoginError}
         />
         {error.type !== "none" && (
-          <p className="error-text" style={{ color: 'red', marginTop: '10px' }}>
+          <p className="error-text" style={{ color: "red", marginTop: "10px" }}>
             {error.message}
           </p>
         )}

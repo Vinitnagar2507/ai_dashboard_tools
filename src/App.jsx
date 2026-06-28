@@ -1,32 +1,50 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+// src/App.jsx
+import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { getCookie } from "./cookies";
+import SetupWizard from "./components/SetupWizard";
 import Login from "./Login";
 import Dashboard from "./Dashboard";
-import { getCookie, setCookie, deleteCookie } from "./cookies";
 
-const ProtectedRoute = ({ children }) => {
-const token = getCookie("token");
-if (!token) return <Navigate to="/login" replace />;
-  return children;
-};
+function ProtectedRoute({ children }) {
+  const token = getCookie("token");
+  return token ? children : <Navigate to="/login" replace />;
+}
 
-function App() {
+export default function App() {
+  const [setupDone, setSetupDone] = useState(
+    () => getCookie("app_setup_done") === "true"
+  );
+
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
+
+        {/* Setup wizard — shown first if setup not done */}
+        <Route
+          path="/"
+          element={
+            setupDone
+              ? <Navigate to="/login" replace />
+              : <SetupWizard onComplete={() => setSetupDone(true)} />
+          }
+        />
+
+        {/* Login page */}
         <Route path="/login" element={<Login />} />
+
+        {/* Dashboard — protected */}
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
+            <ProtectedRoute><Dashboard /></ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
-
-export default App;
